@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-earth-950: #1a1512;
+  --color-earth-900: #2d241e;
+  --color-earth-850: #3a2e26;
+  --color-earth-800: #4a3b31;
+  --color-earth-700: #5c4a3d;
+  --color-earth-500: #8c7361;
+  --color-earth-400: #a88f7d;
+  --color-earth-300: #c4b0a1;
+  --color-earth-200: #dfd2c8;
+  --color-earth-100: #f2ebe6;
+
+  --color-terra-950: #3b1710;
+  --color-terra-900: #5c2317;
+  --color-terra-850: #6d291b;
+  --color-terra-800: #7d2f1f;
+  --color-terra-700: #9e3c28;
+  --color-terra-600: #be4a33;
+  --color-terra-500: #d65d45;
+  --color-terra-400: #e27a66;
+  --color-terra-300: #eba091;
+
+  --color-sand-950: #332714;
+  --color-sand-900: #523f20;
+  --color-sand-800: #75592e;
+  --color-sand-700: #9c773e;
+  --color-sand-600: #c09650;
+  --color-sand-500: #d0a45d;
+  --color-sand-400: #e0c089;
+  --color-sand-300: #ebd4aa;
+  --color-sand-200: #f2e3c6;
+  --color-sand-100: #f8f1e3;
+
+  --color-moss-950: #1b2614;
+  --color-moss-900: #2c3d20;
+  --color-moss-800: #3f572e;
+  --color-moss-700: #53733d;
+  --color-moss-600: #69914d;
+  --color-moss-500: #82b35f;
+  --color-moss-400: #9cc47e;
+  --color-moss-300: #b8d4a1;
+}

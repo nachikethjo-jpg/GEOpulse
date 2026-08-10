@@ -1,0 +1,6 @@
+{
+  "name": "GeoPulse Engine",
+  "description": "An interactive, sci-fi 3D tectonic and geological globe tracker. Simulate active plate boundaries, monitor real-time earthquakes, locate mineral ore deposits, explore deep strata cross-sections, and run smart diagnostics with MantleMind, your AI geological co-pilot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
