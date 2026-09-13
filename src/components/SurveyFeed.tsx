@@ -4,8 +4,8 @@
  */
 
 import { useState, useMemo } from "react";
-import { GeologicalNode, NodeType } from "../types";
-import { Search, ShieldAlert, Activity, Hammer, SlidersHorizontal, ArrowUpDown } from "lucide-react";
+import { GeologicalNode } from "../types";
+import { Search, ShieldAlert, Activity, SlidersHorizontal, ArrowUpDown } from "lucide-react";
 
 interface FeedProps {
   nodes: GeologicalNode[];
@@ -88,7 +88,7 @@ export default function SurveyFeed({
       <div className="bg-earth-950 border-b border-earth-900 p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 text-terra-600 animate-pulse" />
-          <span className="font-bold text-earth-100">OBSERVATIONS & REFERENCE</span>
+          <span className="font-bold text-earth-100">USGS OBSERVATIONS</span>
         </div>
         <div className="text-[10px] text-earth-400">
           NODES FOUND: <span className="text-sand-500 font-bold">{filteredNodes.length}</span>
@@ -167,26 +167,6 @@ export default function SurveyFeed({
                     }`}
                   >
                     Seismic
-                  </button>
-                  <button
-                    onClick={() => onToggleFilter('volcanoes')}
-                    className={`px-1.5 py-0.5 rounded text-[9px] border transition cursor-pointer ${
-                      filters.volcanoes
-                        ? "border-terra-600/30 text-sand-500 bg-terra-950/20"
-                        : "border-transparent text-earth-500 bg-earth-900"
-                    }`}
-                  >
-                    Volcano
-                  </button>
-                  <button
-                    onClick={() => onToggleFilter('minerals')}
-                    className={`px-1.5 py-0.5 rounded text-[9px] border transition cursor-pointer ${
-                      filters.minerals
-                        ? "border-moss-500/30 text-moss-400 bg-moss-950/20"
-                        : "border-transparent text-earth-500 bg-earth-900"
-                    }`}
-                  >
-                    Mineral
                   </button>
                 </div>
               </div>
@@ -296,7 +276,7 @@ export default function SurveyFeed({
           <Activity className="w-3.5 h-3.5 text-moss-500 animate-pulse" />
           <span>USGS: PRELIMINARY OBSERVATIONS</span>
         </div>
-        <span className="text-sand-400">REFERENCE LAYERS ARE NOT LIVE</span>
+        <span className="text-sand-400">VALUES MAY BE REVISED</span>
       </div>
     </div>
   );

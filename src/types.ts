@@ -41,6 +41,8 @@ export interface EarthquakeFeedResponse {
     retrievedAt: string;
     upstreamGeneratedAt?: string;
     notice: string;
+    stale?: boolean;
+    warning?: string;
   };
 }
 

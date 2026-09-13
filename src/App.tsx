@@ -5,7 +5,6 @@
 
 import { useState, useEffect } from "react";
 import { EarthquakeFeedResponse, GeologicalNode } from "./types";
-import { INITIAL_NODES } from "./data";
 import SurveyFeed from "./components/SurveyFeed";
 import CrustMatrixGlobe from "./components/CrustMatrixGlobe";
 import DeepStrataScan from "./components/DeepStrataScan";
@@ -13,20 +12,16 @@ import MantleMindChat from "./components/MantleMindChat";
 import { Radio, Calendar, Info, ShieldAlert, Thermometer, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
 
-const REFERENCE_NODES: GeologicalNode[] = INITIAL_NODES
-  .filter((node) => node.type !== "earthquake")
-  .map((node) => ({ ...node, dataKind: "reference" }));
-
 export default function App() {
   // Application Data States
-  const [nodes, setNodes] = useState<GeologicalNode[]>(REFERENCE_NODES);
+  const [nodes, setNodes] = useState<GeologicalNode[]>([]);
   const [selectedNode, setSelectedNode] = useState<GeologicalNode | null>(null);
 
   // Filter States for both Globe and Sidebar Feed
   const [filters, setFilters] = useState({
     earthquakes: true,
-    volcanoes: true,
-    minerals: true,
+    volcanoes: false,
+    minerals: false,
     plates: true,
     grid: true,
     continents: true,
@@ -49,6 +44,7 @@ export default function App() {
   const [refreshIntervalMs, setRefreshIntervalMs] = useState<number>(60000); // 30000, 60000, or 300000
   const [lastRetrievedAt, setLastRetrievedAt] = useState<string | null>(null);
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [isFeedStale, setIsFeedStale] = useState<boolean>(false);
 
   // Refresh normalized USGS observations through the application server
   const fetchUSGSEarthquakes = async (quiet = false) => {
@@ -59,11 +55,12 @@ export default function App() {
       if (!response.ok) throw new Error(data.error || "USGS feed request failed");
       const feed = data as EarthquakeFeedResponse;
 
-      setNodes([...feed.nodes, ...REFERENCE_NODES]);
+      setNodes(feed.nodes);
       setUsgsCount(feed.nodes.length);
-      setIsLiveSynced(true);
+      setIsLiveSynced(!feed.source.stale);
+      setIsFeedStale(Boolean(feed.source.stale));
       setLastRetrievedAt(feed.source.retrievedAt);
-      setFeedError(null);
+      setFeedError(feed.source.warning || null);
       
       if (!quiet) {
         setAlertNotification(`SYNC COMPLETE: INGESTED ${feed.nodes.length} USGS OBSERVATIONS`);
@@ -72,6 +69,7 @@ export default function App() {
     } catch (err) {
       console.error("USGS connection pipeline error:", err);
       setIsLiveSynced(false);
+      setIsFeedStale(false);
       setFeedError(err instanceof Error ? err.message : "USGS feed unavailable");
     } finally {
       setIsSyncing(false);
@@ -137,7 +135,7 @@ export default function App() {
                 GEOPULSE ENGINE
               </h1>
               <span className={`text-[10px] border px-1.5 py-0.5 rounded font-bold ${isLiveSynced ? "bg-moss-950 border-moss-500/40 text-moss-400" : "bg-red-950 border-red-500/40 text-red-300"}`}>
-                {isLiveSynced ? "USGS CONNECTED" : "FEED OFFLINE"}
+                {isLiveSynced ? "USGS CONNECTED" : isFeedStale ? "CACHED DATA" : "FEED OFFLINE"}
               </span>
             </div>
             <p className="text-[10px] sm:text-xs text-earth-300 tracking-wide">
@@ -174,7 +172,7 @@ export default function App() {
             <span>
               USGS_FEED:{" "}
               <strong className={isLiveSynced ? "text-sand-400 font-bold" : "text-red-100 font-black"}>
-                {isSyncing ? "SYNCING..." : isLiveSynced ? `${usgsCount} EVENTS` : "OFFLINE"}
+                {isSyncing ? "SYNCING..." : isLiveSynced ? `${usgsCount} EVENTS` : isFeedStale ? `${usgsCount} CACHED` : "OFFLINE"}
               </strong>
             </span>
             <motion.span
@@ -218,7 +216,7 @@ export default function App() {
 
       <div className="relative z-10 border-b border-sand-700/40 bg-sand-950/40 px-4 sm:px-6 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] font-mono">
         <span className="text-sand-300">
-          <strong>DATA NOTICE:</strong> Earthquakes are preliminary USGS observations. Volcano and mineral layers are labeled reference data. This is not official emergency guidance.
+          <strong>DATA NOTICE:</strong> All event markers are preliminary USGS observations. They may be delayed or revised. This is not official emergency guidance.
         </span>
         <span className={feedError ? "text-red-300" : "text-earth-400"}>
           {feedError ? `SOURCE ERROR: ${feedError}` : lastRetrievedAt ? `RETRIEVED ${new Date(lastRetrievedAt).toLocaleTimeString([], { timeZone: "UTC", hour: "2-digit", minute: "2-digit", second: "2-digit" })} UTC` : "AWAITING FIRST SOURCE UPDATE"}
@@ -300,20 +298,6 @@ export default function App() {
             >
               <div className={`w-2 h-2 rounded-full ${filters.earthquakes ? "bg-terra-400" : "bg-earth-800"}`} />
               <span>Seismic Sensors</span>
-            </button>
-            <button
-              onClick={() => handleToggleFilter("volcanoes")}
-              className={`flex items-center gap-1.5 transition text-left cursor-pointer ${filters.volcanoes ? "text-sand-500 font-bold" : "text-earth-500"}`}
-            >
-              <div className={`w-2 h-2 rounded-full ${filters.volcanoes ? "bg-sand-500" : "bg-earth-800"}`} />
-              <span>Volcanic Chimneys</span>
-            </button>
-            <button
-              onClick={() => handleToggleFilter("minerals")}
-              className={`flex items-center gap-1.5 transition text-left cursor-pointer ${filters.minerals ? "text-moss-400 font-bold" : "text-earth-500"}`}
-            >
-              <div className={`w-2 h-2 rounded-full ${filters.minerals ? "bg-moss-400" : "bg-earth-800"}`} />
-              <span>Mineral Ore-VEINS</span>
             </button>
           </div>
 
