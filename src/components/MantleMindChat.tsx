@@ -19,9 +19,11 @@ const DEFAULT_MESSAGES: ChatMessage[] = [
   {
     id: "welcome-msg",
     role: "assistant",
-    content: `Greetings, Surveyor. I am **MantleMind**, your tactical planetary surveyor AI. 
+    content: `Greetings, Surveyor. I am **MantleMind**, an AI-generated geological explainer.
 
-I monitor active plate dynamics, volcanic plumes, and rare mineral strata. Select any incident on the left feed, lock onto any node on the **CrustMatrix 3D Globe**, or inspect core layers to transmit telemetry directly into my diagnostic core. 
+I can discuss preliminary USGS earthquake observations and the dashboard's clearly labeled reference layers. Select a node on the **CrustMatrix Globe** or inspect a core layer to provide context.
+
+My responses are generated interpretations—not official observations, forecasts, or emergency guidance.
 
 How shall we survey the lithosphere today?`,
     timestamp: new Date().toISOString()
@@ -180,7 +182,7 @@ export default function MantleMindChat({
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-sand-400/80 bg-terra-950/40 border border-terra-800/40 px-2 py-0.5 rounded">
           <Sparkles className="w-3 h-3 text-sand-400" />
-          <span>GEMINI ACTIVE</span>
+          <span>AI-GENERATED OUTPUT</span>
         </div>
       </div>
 
@@ -213,7 +215,7 @@ export default function MantleMindChat({
         </div>
       ) : (
         <div className="bg-earth-950/20 border-b border-earth-900/60 px-3 py-1.5 text-[10px] text-earth-400 text-center">
-          LOCK ON ANY GLOBE NODE TO STREAM SEISMOLOGICAL METRICS DIRECTLY
+          SELECT A NODE TO PROVIDE CONTEXT · AI OUTPUT IS NOT OFFICIAL GUIDANCE
         </div>
       )}
 

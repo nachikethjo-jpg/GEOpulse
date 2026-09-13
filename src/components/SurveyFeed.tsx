@@ -17,7 +17,6 @@ interface FeedProps {
     minerals: boolean;
   };
   onToggleFilter: (key: 'earthquakes' | 'volcanoes' | 'minerals') => void;
-  sessionHistory: GeologicalNode[];
 }
 
 type SortOption = "newest" | "severity";
@@ -28,9 +27,7 @@ export default function SurveyFeed({
   onSelectNode,
   filters,
   onToggleFilter,
-  sessionHistory,
 }: FeedProps) {
-  const [activeTab, setActiveTab] = useState<"live" | "history">("live");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sortBy, setSortBy] = useState<SortOption>("severity");
   const [showConfig, setShowConfig] = useState<boolean>(false);
@@ -82,10 +79,8 @@ export default function SurveyFeed({
   // Format timestamp relative indicator
   const formatTime = (isoString: string) => {
     const d = new Date(isoString);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " UTC";
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + " UTC";
   };
-
-  const displayedNodes = activeTab === "live" ? filteredNodes : sessionHistory;
 
   return (
     <div id="survey_feed_alarm_panel" className="flex flex-col h-full bg-earth-950/45 border border-earth-900 rounded-lg overflow-hidden font-mono text-xs select-none">
@@ -93,46 +88,14 @@ export default function SurveyFeed({
       <div className="bg-earth-950 border-b border-earth-900 p-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ShieldAlert className="w-4 h-4 text-terra-600 animate-pulse" />
-          <span className="font-bold text-earth-100">TACTICAL FEED & ALARMS</span>
+          <span className="font-bold text-earth-100">OBSERVATIONS & REFERENCE</span>
         </div>
         <div className="text-[10px] text-earth-400">
-          {activeTab === "live" ? "NODES FOUND:" : "SIMULATED:"} <span className="text-sand-500 font-bold">{activeTab === "live" ? filteredNodes.length : sessionHistory.length}</span>
+          NODES FOUND: <span className="text-sand-500 font-bold">{filteredNodes.length}</span>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex border-b border-earth-900 bg-earth-950/80">
-        <button
-          id="tab_live_feed"
-          onClick={() => setActiveTab("live")}
-          className={`flex-1 py-2 text-center font-bold text-[10px] tracking-wider transition-all border-b-2 uppercase cursor-pointer ${
-            activeTab === "live"
-              ? "border-sand-500 text-sand-400 bg-earth-950/40"
-              : "border-transparent text-earth-500 hover:text-earth-300 hover:bg-earth-900/10"
-          }`}
-        >
-          Live Feed
-        </button>
-        <button
-          id="tab_session_history"
-          onClick={() => setActiveTab("history")}
-          className={`flex-1 py-2 text-center font-bold text-[10px] tracking-wider transition-all border-b-2 uppercase cursor-pointer relative ${
-            activeTab === "history"
-              ? "border-terra-600 text-terra-500 bg-earth-950/40"
-              : "border-transparent text-earth-500 hover:text-earth-300 hover:bg-earth-900/10"
-          }`}
-        >
-          Session History
-          {sessionHistory.length > 0 && (
-            <span className="absolute top-1.5 right-1.5 px-1.5 py-0.2 bg-terra-950 text-terra-400 border border-terra-900/60 text-[8px] font-black rounded-full min-w-[14px] text-center">
-              {sessionHistory.length}
-            </span>
-          )}
-        </button>
       </div>
 
       {/* Search Bar & Config Controls */}
-      {activeTab === "live" && (
         <div className="p-3 border-b border-earth-900 bg-earth-950/80 space-y-2">
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -230,12 +193,11 @@ export default function SurveyFeed({
             </div>
           )}
         </div>
-      )}
 
       {/* List Feed viewport */}
       <div className="flex-1 overflow-y-auto p-2.5 space-y-2 bg-earth-950/20 max-h-[300px] lg:max-h-none">
-        {displayedNodes.length > 0 ? (
-          displayedNodes.map((node) => {
+        {filteredNodes.length > 0 ? (
+          filteredNodes.map((node) => {
             const isSelected = selectedNode?.id === node.id;
 
             // Define specific styles based on category
@@ -248,7 +210,7 @@ export default function SurveyFeed({
 
             if (node.type === "earthquake") {
               headerColor = "text-terra-400";
-              badgeText = `M${node.magnitude?.toFixed(1) || "5.0"}`;
+              badgeText = node.magnitude == null ? "M?" : `M${node.magnitude.toFixed(1)} ${node.magnitudeType || ""}`;
               badgeBg = node.magnitude && node.magnitude > 7.0 
                 ? "bg-red-950/60 border border-red-500/40 text-red-400 font-bold" 
                 : "bg-terra-950/50 border border-terra-800/40 text-terra-400";
@@ -295,6 +257,12 @@ export default function SurveyFeed({
                   </span>
                 </div>
 
+                <div className="flex items-center gap-1.5 text-[8px] uppercase tracking-wider">
+                  <span className={`rounded border px-1.5 py-0.5 font-bold ${node.dataKind === "live_observation" ? "border-moss-500/40 bg-moss-950/40 text-moss-400" : "border-sand-700/40 bg-sand-950/30 text-sand-400"}`}>
+                    {node.dataKind === "live_observation" ? `${node.provenance?.provider || "OFFICIAL SOURCE"} · ${node.provenance?.reviewStatus || "unknown"}` : "STATIC REFERENCE · NOT LIVE"}
+                  </span>
+                </div>
+
                 {/* Description details snippet */}
                 <p className="text-earth-300 text-[10.5px] leading-relaxed line-clamp-2 select-text font-sans">
                   {node.details}
@@ -314,15 +282,10 @@ export default function SurveyFeed({
               </button>
             );
           })
-        ) : activeTab === "live" ? (
-          <div className="text-center py-10 text-earth-400 border border-dashed border-earth-900 rounded p-4">
-            <p>NO ACTIVE INCIDENTS MATCH SEARCH MATRIX.</p>
-            <p className="text-[10px] text-earth-500 mt-1">Adjust search parameters or sensor filters.</p>
-          </div>
         ) : (
-          <div className="text-center py-12 text-earth-400 border border-dashed border-earth-900 rounded p-4">
-            <p>NO SIMULATED EVENTS RECORDED.</p>
-            <p className="text-[10px] text-earth-500 mt-1">Click "SIMULATE PULSE" in the telemetry panel to record tectonic history.</p>
+          <div className="text-center py-10 text-earth-400 border border-dashed border-earth-900 rounded p-4">
+            <p>NO RECORDS MATCH SEARCH MATRIX.</p>
+            <p className="text-[10px] text-earth-500 mt-1">Adjust search parameters or sensor filters.</p>
           </div>
         )}
       </div>
@@ -331,9 +294,9 @@ export default function SurveyFeed({
       <div className="bg-earth-950 border-t border-earth-900 p-2 text-[10px] text-earth-400 flex justify-between items-center px-3">
         <div className="flex items-center gap-2">
           <Activity className="w-3.5 h-3.5 text-moss-500 animate-pulse" />
-          <span>SYS_STATUS: RECORDING</span>
+          <span>USGS: PRELIMINARY OBSERVATIONS</span>
         </div>
-        <span className="text-sand-400 animate-pulse">LITHOSPHERE GRID_SYNCED</span>
+        <span className="text-sand-400">REFERENCE LAYERS ARE NOT LIVE</span>
       </div>
     </div>
   );

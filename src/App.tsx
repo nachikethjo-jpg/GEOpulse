@@ -4,20 +4,23 @@
  */
 
 import { useState, useEffect } from "react";
-import { GeologicalNode } from "./types";
+import { EarthquakeFeedResponse, GeologicalNode } from "./types";
 import { INITIAL_NODES } from "./data";
 import SurveyFeed from "./components/SurveyFeed";
 import CrustMatrixGlobe from "./components/CrustMatrixGlobe";
 import DeepStrataScan from "./components/DeepStrataScan";
 import MantleMindChat from "./components/MantleMindChat";
-import { Radio, Calendar, Info, ShieldAlert, Thermometer, Database, Plus, RefreshCw, Wifi, WifiOff } from "lucide-react";
+import { Radio, Calendar, Info, ShieldAlert, Thermometer, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { motion } from "motion/react";
+
+const REFERENCE_NODES: GeologicalNode[] = INITIAL_NODES
+  .filter((node) => node.type !== "earthquake")
+  .map((node) => ({ ...node, dataKind: "reference" }));
 
 export default function App() {
   // Application Data States
-  const [nodes, setNodes] = useState<GeologicalNode[]>(INITIAL_NODES);
+  const [nodes, setNodes] = useState<GeologicalNode[]>(REFERENCE_NODES);
   const [selectedNode, setSelectedNode] = useState<GeologicalNode | null>(null);
-  const [sessionHistory, setSessionHistory] = useState<GeologicalNode[]>([]);
 
   // Filter States for both Globe and Sidebar Feed
   const [filters, setFilters] = useState({
@@ -36,82 +39,46 @@ export default function App() {
   // System Time State (Dynamic Clock)
   const [systemTime, setSystemTime] = useState<string>("");
 
-  // Notification overlay state when a new simulated event occurs
+  // Notification overlay for manual feed refreshes and refresh-rate changes
   const [alertNotification, setAlertNotification] = useState<string | null>(null);
 
-  // USGS Webhook Feed Live States
+  // Server-proxied USGS polling feed state
   const [isLiveSynced, setIsLiveSynced] = useState<boolean>(false);
   const [usgsCount, setUsgsCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [refreshIntervalMs, setRefreshIntervalMs] = useState<number>(60000); // 30000, 60000, or 300000
+  const [lastRetrievedAt, setLastRetrievedAt] = useState<string | null>(null);
+  const [feedError, setFeedError] = useState<string | null>(null);
 
-  // Live USGS Earthquake Webhook Syncing Function
+  // Refresh normalized USGS observations through the application server
   const fetchUSGSEarthquakes = async (quiet = false) => {
     if (!quiet) setIsSyncing(true);
     try {
-      const response = await fetch(
-        "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson"
-      );
-      if (!response.ok) throw new Error("USGS server responded with error code");
-      const geoJson = await response.json();
-      const features = geoJson.features || [];
+      const response = await fetch("/api/earthquakes", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "USGS feed request failed");
+      const feed = data as EarthquakeFeedResponse;
 
-      // Convert USGS features to GeologicalNode objects
-      const liveQuakes: GeologicalNode[] = features.map((feat: any) => {
-        const props = feat.properties;
-        const geom = feat.geometry;
-        const mag = props.mag || 2.5;
-        const lon = geom.coordinates[0];
-        const lat = geom.coordinates[1];
-        const rawDepth = geom.coordinates[2] || 10;
-
-        return {
-          id: `usgs-${feat.id || Math.random().toString(36).substr(2, 9)}`,
-          type: "earthquake",
-          name: props.title ? props.title.replace(/^M\s*\d+(\.\d+)?\s*-\s*/i, "") : `M${mag.toFixed(1)} Rupture`,
-          lat: lat,
-          lng: lon,
-          depth: parseFloat(rawDepth.toFixed(1)),
-          magnitude: parseFloat(mag.toFixed(1)),
-          status: mag >= 6.0 ? "critical" : mag >= 4.5 ? "pulsing" : "active",
-          timestamp: new Date(props.time || Date.now()).toISOString(),
-          details: `Real-time USGS Seismic Webhook alert. Event localized at: "${props.place || "Unclassified Oceanic Margin"}". Richter Magnitude: ${mag.toFixed(1)} Mw. Crustal Depth: ${rawDepth.toFixed(1)} km. Feed source: USGS.gov network station.`
-        };
-      });
-
-      // Filter out only magnitude >= 2.5 to maintain peak rendering performance
-      const filteredQuakes = liveQuakes.filter((q) => q.magnitude && q.magnitude >= 2.5);
-
-      setNodes((prev) => {
-        // Keep non-earthquake items from INITIAL_NODES (volcanoes, minerals)
-        const baseStaticNodes = INITIAL_NODES.filter((n) => n.type !== "earthquake");
-        
-        // Remove any old USGS nodes from previous syncs to prevent duplicates, but keep active simulations
-        const currentSimulatedOnly = prev.filter(
-          (n) => n.type !== "earthquake" || n.id.startsWith("sim-")
-        );
-        
-        // Return live quakes prepended, plus any active simulations and all base static volcano/mineral nodes
-        const finalNodes = [...filteredQuakes, ...currentSimulatedOnly.filter((n) => n.type === "earthquake"), ...baseStaticNodes];
-        return finalNodes;
-      });
-
-      setUsgsCount(filteredQuakes.length);
+      setNodes([...feed.nodes, ...REFERENCE_NODES]);
+      setUsgsCount(feed.nodes.length);
       setIsLiveSynced(true);
+      setLastRetrievedAt(feed.source.retrievedAt);
+      setFeedError(null);
       
       if (!quiet) {
-        setAlertNotification(`SYNC COMPLETE: INGESTED ${filteredQuakes.length} REAL-TIME EVENT FEEDS`);
+        setAlertNotification(`SYNC COMPLETE: INGESTED ${feed.nodes.length} USGS OBSERVATIONS`);
         setTimeout(() => setAlertNotification(null), 4000);
       }
     } catch (err) {
-      console.error("USGS connection pipeline error, defaulting to local simulated nodes:", err);
+      console.error("USGS connection pipeline error:", err);
       setIsLiveSynced(false);
+      setFeedError(err instanceof Error ? err.message : "USGS feed unavailable");
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Run live USGS Webhook sync on component mount and auto-refresh dynamically based on frequency selection
+  // Sync on mount and auto-refresh at the selected frequency
   useEffect(() => {
     fetchUSGSEarthquakes(true);
     const syncInterval = setInterval(() => {
@@ -151,87 +118,6 @@ export default function App() {
     setExternalPrompt(msg);
   };
 
-  // Action: Simulate a brand-new live tectonic pulse
-  const handleSimulatePulseEvent = () => {
-    const eventTypes: Array<"earthquake" | "volcano" | "mineral"> = [
-      "earthquake",
-      "volcano",
-      "mineral",
-    ];
-    const chosenType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-
-    // Random coordinates centered on active regions
-    const hotpots = [
-      { name: "Ring of Fire Segment [Mariana Trench]", lat: 11.349, lng: 142.199 },
-      { name: "Sunda subduction zone Segment", lat: -8.243, lng: 115.151 },
-      { name: "Reykjanes Hydrothermal Trench", lat: 63.842, lng: -22.451 },
-      { name: "Andean Volcanic Arc [Chile]", lat: -33.448, lng: -70.669 },
-      { name: "Cascadia subduction zone Megathrust", lat: 48.428, lng: -125.331 },
-    ];
-    const spot = hotpots[Math.floor(Math.random() * hotpots.length)];
-
-    let newNode: GeologicalNode;
-    const uid = `sim-${Date.now()}`;
-
-    if (chosenType === "earthquake") {
-      const mag = parseFloat((5.5 + Math.random() * 3.2).toFixed(1));
-      newNode = {
-        id: uid,
-        type: "earthquake",
-        name: `${spot.name} - M${mag} Pulse`,
-        lat: spot.lat + (Math.random() - 0.5) * 2,
-        lng: spot.lng + (Math.random() - 0.5) * 2,
-        depth: Math.floor(10 + Math.random() * 80),
-        magnitude: mag,
-        status: mag > 7.2 ? "critical" : "pulsing",
-        timestamp: new Date().toISOString(),
-        details: `Simulated high-frequency seismic rupture. Elastic strain energy release event registered on standard lithospheric arrays.`
-      };
-    } else if (chosenType === "volcano") {
-      newNode = {
-        id: uid,
-        type: "volcano",
-        name: `${spot.name.split(" ")[0]} Magma Vent`,
-        lat: spot.lat + (Math.random() - 0.5) * 1.5,
-        lng: spot.lng + (Math.random() - 0.5) * 1.5,
-        depth: Math.floor(2 + Math.random() * 12),
-        status: Math.random() > 0.5 ? "critical" : "active",
-        timestamp: new Date().toISOString(),
-        details: `Eruptive micro-gas emission detected. Thermal imaging scans indicate magma chamber expansion and elevated sulfur dioxide levels.`
-      };
-    } else {
-      const minerals: Array<{ name: string; type: "gold" | "lithium" | "copper" | "platinum" | "rare_earth" | "uranium" }> = [
-        { name: "Lithium Crystal Cluster", type: "lithium" },
-        { name: "Deep Gold Hydrothermal Vein", type: "gold" },
-        { name: "Rare Earth Carbonatite Dyke", type: "rare_earth" },
-        { name: "High-grade Pitchblende Ore", type: "uranium" },
-      ];
-      const ore = minerals[Math.floor(Math.random() * minerals.length)];
-      newNode = {
-        id: uid,
-        type: "mineral",
-        name: ore.name,
-        lat: spot.lat + (Math.random() - 0.5) * 3,
-        lng: spot.lng + (Math.random() - 0.5) * 3,
-        depth: parseFloat((0.2 + Math.random() * 4).toFixed(1)),
-        value: "Unmapped Core Vein",
-        mineralType: ore.type,
-        timestamp: new Date().toISOString(),
-        details: `Subterranean scans completed. Identified heavy concentration of ${ore.type} crystalline structures at shallow depths.`
-      };
-    }
-
-    setNodes((prev) => [newNode, ...prev]);
-    setSessionHistory((prev) => [newNode, ...prev].slice(0, 10));
-    setSelectedNode(newNode); // Automatically lock-on globe coordinates to simulated event
-    setAlertNotification(`LITHOSPHERIC SIGNAL CAPTURED: ${newNode.name}`);
-
-    // Fade alert notification after 5 seconds
-    setTimeout(() => {
-      setAlertNotification(null);
-    }, 5000);
-  };
-
   return (
     <div id="root_app_container" className="min-h-screen bg-earth-950 text-sand-100 flex flex-col font-mono relative overflow-x-hidden selection:bg-terra-950 selection:text-sand-400">
       
@@ -250,8 +136,8 @@ export default function App() {
               <h1 className="text-base sm:text-lg font-black tracking-tight text-sand-100">
                 GEOPULSE ENGINE
               </h1>
-              <span className="text-[10px] bg-terra-950 border border-sand-500/30 text-sand-400 px-1.5 py-0.5 rounded font-bold animate-pulse">
-                LIVE
+              <span className={`text-[10px] border px-1.5 py-0.5 rounded font-bold ${isLiveSynced ? "bg-moss-950 border-moss-500/40 text-moss-400" : "bg-red-950 border-red-500/40 text-red-300"}`}>
+                {isLiveSynced ? "USGS CONNECTED" : "FEED OFFLINE"}
               </span>
             </div>
             <p className="text-[10px] sm:text-xs text-earth-300 tracking-wide">
@@ -268,13 +154,7 @@ export default function App() {
             <span>{systemTime || "LOADING SYSTEM TIME..."}</span>
           </div>
 
-          {/* Core Status indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 bg-earth-900 border border-earth-850 rounded px-2.5 py-1 text-[11px] text-earth-300">
-            <Database className="w-3.5 h-3.5 text-earth-400" />
-            <span>DB_CORES: <strong className="text-moss-500">ONLINE</strong></span>
-          </div>
-
-          {/* USGS Webhook Feed Status Button */}
+          {/* USGS polling feed status button */}
           <button
             id="btn_usgs_webhook_sync"
             onClick={() => fetchUSGSEarthquakes()}
@@ -284,7 +164,7 @@ export default function App() {
                 ? "bg-earth-900 border-moss-500/30 text-moss-400 hover:bg-earth-850"
                 : "bg-red-950/90 border-red-500 text-red-200 hover:bg-red-900 hover:text-white hover:border-red-400 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse transition-all duration-300 font-black"
             }`}
-            title="Click to force-sync real USGS earthquake webhooks"
+            title="Refresh the server-proxied USGS earthquake feed"
           >
             {isLiveSynced ? (
               <Wifi className={`w-3.5 h-3.5 ${isSyncing ? "animate-pulse" : "text-moss-400"}`} />
@@ -333,17 +213,17 @@ export default function App() {
             </select>
           </div>
 
-          {/* Simulate Action Button */}
-          <button
-            id="btn_simulate_pulse_event"
-            onClick={handleSimulatePulseEvent}
-            className="bg-gradient-to-r from-terra-700 to-terra-600 hover:from-terra-600 hover:to-terra-500 text-sand-100 font-bold px-3.5 py-1.5 rounded text-xs transition duration-200 flex items-center gap-1.5 shadow-lg shadow-sand-500/10 cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5 text-sand-100 font-bold" />
-            <span>SIMULATE TECTONIC PULSE</span>
-          </button>
         </div>
       </header>
+
+      <div className="relative z-10 border-b border-sand-700/40 bg-sand-950/40 px-4 sm:px-6 py-2 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[10px] font-mono">
+        <span className="text-sand-300">
+          <strong>DATA NOTICE:</strong> Earthquakes are preliminary USGS observations. Volcano and mineral layers are labeled reference data. This is not official emergency guidance.
+        </span>
+        <span className={feedError ? "text-red-300" : "text-earth-400"}>
+          {feedError ? `SOURCE ERROR: ${feedError}` : lastRetrievedAt ? `RETRIEVED ${new Date(lastRetrievedAt).toLocaleTimeString([], { timeZone: "UTC", hour: "2-digit", minute: "2-digit", second: "2-digit" })} UTC` : "AWAITING FIRST SOURCE UPDATE"}
+        </span>
+      </div>
 
       {/* --- LIVE SEISMIC NOTIFICATION POPUP --- */}
       {alertNotification && (
@@ -378,7 +258,6 @@ export default function App() {
             onSelectNode={handleSelectNode}
             filters={filters}
             onToggleFilter={handleToggleFilter}
-            sessionHistory={sessionHistory}
           />
         </section>
 
@@ -477,7 +356,7 @@ export default function App() {
           <Info className="w-3.5 h-3.5 text-earth-500 shrink-0" />
           <span>INSTRUCTIONS: DRAG globe to rotate coordinates. SCROLL or slider to zoom. CLICK any blinking incident to lock telemetry scans.</span>
         </div>
-        <span>GeoPulse Surveyor Suite • Compiled successfully</span>
+          <span>GeoPulse Surveyor Suite • Observations may be delayed or revised</span>
       </footer>
 
     </div>
