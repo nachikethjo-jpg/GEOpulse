@@ -3,15 +3,56 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import type { EarthquakeFeedResponse } from "./src/types.js";
+import { normalizeUsgsFeed, USGS_FEED_URL } from "./src/usgs.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const FEED_CACHE_MS = 30_000;
+
+let earthquakeCache: { expiresAt: number; payload: EarthquakeFeedResponse } | null = null;
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  app.get("/api/earthquakes", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (earthquakeCache && earthquakeCache.expiresAt > Date.now()) {
+      return res.json(earthquakeCache.payload);
+    }
+
+    try {
+      const response = await fetch(USGS_FEED_URL, {
+        headers: { Accept: "application/geo+json, application/json" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok) throw new Error(`USGS returned HTTP ${response.status}`);
+
+      const retrievedAt = new Date().toISOString();
+      const payload = normalizeUsgsFeed(await response.json(), retrievedAt);
+      earthquakeCache = { expiresAt: Date.now() + FEED_CACHE_MS, payload };
+      return res.json(payload);
+    } catch (error: any) {
+      console.error("USGS ingestion error:", error);
+      if (earthquakeCache) {
+        return res.json({
+          ...earthquakeCache.payload,
+          source: {
+            ...earthquakeCache.payload.source,
+            stale: true,
+            warning: "USGS refresh failed; displaying the last successfully retrieved observations.",
+          },
+        });
+      }
+      return res.status(502).json({
+        error: "The authoritative USGS feed is currently unavailable.",
+        details: error.message,
+      });
+    }
+  });
 
   // Lazy initialize Gemini client inside the API endpoint
   app.post("/api/gemini/chat", async (req, res) => {
@@ -48,7 +89,8 @@ Rules:
 2. Use precise geoscientific terms (subduction zones, plate tectonics, seismic velocities, lithostatic pressure, geothermal gradient).
 3. Keep responses clean, concise, structured, and easy to read using markdown (such as bold headers, bullet points).
 4. If the user refers to a specific node or scanned location, integrate that data into your analysis.
-5. Do not invent or hallucinate coordinates that contradict what the user provides, but do provide rich geological narratives around them.`;
+5. Do not invent or hallucinate coordinates that contradict what the user provides, but do provide rich geological narratives around them.
+6. Clearly distinguish preliminary observations, static reference data, and interpretation. Never present your response as an official warning, forecast, or emergency instruction.`;
 
       // Format the messages for chat. Gemini SDK expects `{ role: 'user' | 'model', parts: [{ text: '...' }] }`
       // Convert standard client-side chat format to the SDK's expected format

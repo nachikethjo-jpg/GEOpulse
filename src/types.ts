@@ -4,6 +4,16 @@
  */
 
 export type NodeType = "earthquake" | "volcano" | "mineral";
+export type DataKind = "live_observation" | "reference";
+
+export interface DataProvenance {
+  provider: string;
+  providerRecordId: string;
+  sourceUrl: string;
+  retrievedAt: string;
+  updatedAt?: string;
+  reviewStatus?: "automatic" | "reviewed" | "deleted" | "unknown";
+}
 
 export interface GeologicalNode {
   id: string;
@@ -18,6 +28,22 @@ export interface GeologicalNode {
   status?: "active" | "dormant" | "pulsing" | "critical"; // for volcanoes / seismic activity
   timestamp: string;
   details: string;
+  dataKind?: DataKind;
+  provenance?: DataProvenance;
+  magnitudeType?: string;
+}
+
+export interface EarthquakeFeedResponse {
+  nodes: GeologicalNode[];
+  source: {
+    provider: string;
+    feedUrl: string;
+    retrievedAt: string;
+    upstreamGeneratedAt?: string;
+    notice: string;
+    stale?: boolean;
+    warning?: string;
+  };
 }
 
 export interface TectonicPlate {
