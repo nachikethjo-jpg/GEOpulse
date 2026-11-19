@@ -49,7 +49,12 @@ export function normalizeUsgsFeed(input: unknown, retrievedAt: string): Earthqua
     if (!feature || !properties || !Array.isArray(coordinates) ||
         !finiteNumber(coordinates[0]) || !finiteNumber(coordinates[1]) ||
         !finiteNumber(coordinates[2]) || !finiteNumber(properties.mag) ||
-        !finiteNumber(properties.time)) return [];
+        !finiteNumber(properties.time) ||
+        coordinates[0] < -180 || coordinates[0] > 180 ||
+        coordinates[1] < -90 || coordinates[1] > 90 ||
+        coordinates[2] < -5 || coordinates[2] > 800 ||
+        properties.mag < -2 || properties.mag > 10 ||
+        !Number.isFinite(new Date(properties.time).getTime())) return [];
 
     const providerRecordId = String(feature.id || properties.code || "");
     if (!providerRecordId) return [];
