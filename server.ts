@@ -16,7 +16,7 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "32kb" }));
 
   app.get("/api/earthquakes", async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -54,8 +54,17 @@ async function startServer() {
     }
   });
 
-  // Lazy initialize Gemini client inside the API endpoint
+  // Basic per-process abuse control; use an edge/WAF limit in production as well.
+  const chatHits = new Map<string, { count: number; resetAt: number }>();
   app.post("/api/gemini/chat", async (req, res) => {
+    const clientKey = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    const bucket = chatHits.get(clientKey);
+    if (bucket && bucket.resetAt > now && bucket.count >= 10) {
+      return res.status(429).json({ error: "Request limit reached. Try again shortly." });
+    }
+    if (!bucket || bucket.resetAt <= now) chatHits.set(clientKey, { count: 1, resetAt: now + 60_000 });
+    else bucket.count += 1;
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
@@ -66,8 +75,15 @@ async function startServer() {
 
       const { messages, contextNode } = req.body;
 
-      if (!messages || !Array.isArray(messages)) {
-        return res.status(400).json({ error: "Invalid request. 'messages' array is required." });
+      if (!Array.isArray(messages) || messages.length < 1 || messages.length > 20 ||
+          !messages.every((m: any) => m && (m.role === "user" || m.role === "assistant") &&
+            typeof m.content === "string" && m.content.length > 0 && m.content.length <= 4000)) {
+        return res.status(400).json({ error: "Invalid messages. Supply 1–20 user/assistant messages of up to 4,000 characters each." });
+      }
+      if (contextNode && (!Number.isFinite(contextNode.lat) || contextNode.lat < -90 || contextNode.lat > 90 ||
+          !Number.isFinite(contextNode.lng) || contextNode.lng < -180 || contextNode.lng > 180 ||
+          typeof contextNode.name !== "string" || contextNode.name.length > 160)) {
+        return res.status(400).json({ error: "Invalid selected-node context." });
       }
 
       const ai = new GoogleGenAI({
@@ -123,7 +139,7 @@ User Inquiry: ${lastMsg.parts[0].text}`;
       console.error("Gemini API Error in /api/gemini/chat:", error);
       return res.status(500).json({
         error: "An error occurred while generating diagnostics with MantleMind.",
-        details: error.message || error
+        details: "The diagnostic provider request failed."
       });
     }
   });
